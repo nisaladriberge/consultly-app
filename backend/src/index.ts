@@ -1,29 +1,50 @@
 import express, { Request, Response } from 'express';
+import prisma from './db.js'; // 👈 Import our Prisma instance (add .js for ESM resolution)
 
 const app = express();
 const PORT = 5000;
 
-// 1. Tell Express to use JSON middleware (This is the package inspector!)
 app.use(express.json());
 
-// Our original GET route
+// 🏠 GET Route (Home)
 app.get('/', (req: Request, res: Response) => {
   res.send('Welcome to the Consultly API Server! 🚀');
 });
 
-// 2. Create a POST route to handle user registration (Simulation)
-app.post('/api/v1/users/register', (req: Request, res: Response) => {
-  // Extracting data sent by the user from req.body
-  const { name, email, role } = req.body;
+// 💾 POST Route: Registers a User directly to the Live SQLite Database
+app.post('/api/v1/users/register', async (req: Request, res: Response) => {
+  try {
+    const { name, email, role } = req.body;
 
-  // Let's print it to our backend terminal to verify we captured it
-  console.log('Received registration data:', { name, email, role });
+    // 1. Basic validation check
+    if (!name || !email || !role) {
+      return res.status(400).json({ error: 'All fields (name, email, role) are required.' });
+    }
 
-  // 3. Send a friendly response back to the client
-  res.status(201).json({
-    message: 'User registered successfully! 🎉',
-    data: { name, email, role }
-  });
+    // 2. Insert the user data into the database via Prisma
+    const newUser = await prisma.user.create({
+      data: {
+        name: name,
+        email: email,
+        role: role,
+      },
+    });
+
+    // 3. Return the saved database user object back to Postman
+    res.status(201).json({
+      message: 'User successfully saved to database! 🎉',
+      user: newUser,
+    });
+    
+  } catch (error: any) {
+    // Handle database constraint issues (e.g., if the email already exists)
+    if (error.code === 'P2002') {
+      return res.status(400).json({ error: 'An account with this email already exists!' });
+    }
+    
+    console.error('Database Error:', error);
+    res.status(500).json({ error: 'Something went wrong inside the server.' });
+  }
 });
 
 app.listen(PORT, () => {
